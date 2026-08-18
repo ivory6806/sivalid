@@ -8,9 +8,10 @@ use App\Mail\SuratDirevisi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use setasign\Fpdi\Fpdi;
+use Carbon\Carbon;
 
 class ValidasiController extends Controller
 {
@@ -51,7 +52,6 @@ class ValidasiController extends Controller
             return redirect()->route('validasi.index')->with('error', 'Surat ini sudah tidak dalam status menunggu validasi.');
         }
 
-        // Diperbaiki: mengarah ke file atur-qr.blade.php (bukan create-generic)
         return view('surat.atur-qr', compact('surat'));
     }
 
@@ -210,7 +210,7 @@ class ValidasiController extends Controller
             } catch (\Throwable $e) {
                 @unlink($qrTempPath);
                 $failed[] = $surat->nomor_surat;
-                $errors[] = "Gagal stamp QR untuk {$surat->nomor_surat}: " . $e->getMessage();
+                $errors[] = "Gagal stamp QR untuk {$surat->nomor_surat}: " . $e->getMessage() . ' (coba install qpdf di server)';
                 continue;
             }
 
@@ -329,7 +329,7 @@ class ValidasiController extends Controller
             $this->stampQrOnPdf($originalPdfPath, $qrTempPath, $outputPath, $surat);
         } catch (\Throwable $e) {
             @unlink($qrTempPath);
-            return ['success' => false, 'message' => 'Gagal stamp QR ke PDF: ' . $e->getMessage()];
+            return ['success' => false, 'message' => 'Gagal stamp QR ke PDF: ' . $e->getMessage() . ' — Kemungkinan PDF ini menggunakan kompresi yang tidak didukung. Coba install "qpdf" di server (apt install qpdf) agar bisa dinormalisasi otomatis, atau minta pengaju meng-export ulang PDF-nya (misal print-to-PDF ulang dari LibreOffice/Word).'];
         }
 
         @unlink($qrTempPath);
@@ -360,7 +360,7 @@ class ValidasiController extends Controller
                 Mail::to($suratFresh->user->email)->send(new SuratDisetujui($suratFresh));
             }
         } catch (\Throwable $e) {
-            Log::error('Gagal kirim email persetujuan (Surat ' . $surat->nomor_surat . '): ' . $e->getMessage());
+            \Log::error('Gagal kirim email persetujuan (Surat ' . $surat->nomor_surat . '): ' . $e->getMessage());
         }
     }
 
@@ -375,7 +375,7 @@ class ValidasiController extends Controller
                 Mail::to($suratFresh->user->email)->send(new SuratDirevisi($suratFresh));
             }
         } catch (\Throwable $e) {
-            Log::error('Gagal kirim email revisi (Surat ' . $surat->nomor_surat . '): ' . $e->getMessage());
+            \Log::error('Gagal kirim email revisi (Surat ' . $surat->nomor_surat . '): ' . $e->getMessage());
         }
     }
 
@@ -417,47 +417,112 @@ class ValidasiController extends Controller
      */
     private function stampQrOnPdf(string $originalPdf, string $qrImage, string $outputPdf, $surat): void
     {
-        $pdf = new Fpdi();
-        $pdf->SetAutoPageBreak(false);
+        // Normalisasi PDF dulu (kalau qpdf tersedia) supaya FPDI versi gratis
+        // bisa baca PDF yang pakai compressed object/xref streams.
+        $normalizedPdf = $this->normalizePdfForFpdi($originalPdf);
 
-        $pageCount = $pdf->setSourceFile($originalPdf);
-        $targetPage = min(max($surat->effective_qr_page, 1), $pageCount);
+        try {
+            $pdf = new Fpdi();
+            $pdf->SetAutoPageBreak(false);
 
-        for ($pageNo = 1; $pageNo <= $pageCount; $pageNo++) {
-            $templateId = $pdf->importPage($pageNo);
-            $size = $pdf->getTemplateSize($templateId);
+            $pageCount = $pdf->setSourceFile($normalizedPdf);
+            $targetPage = min(max($surat->effective_qr_page, 1), $pageCount);
 
-            $orientation = ($size['width'] > $size['height']) ? 'L' : 'P';
-            $pdf->AddPage($orientation, [$size['width'], $size['height']]);
-            $pdf->useTemplate($templateId);
+            for ($pageNo = 1; $pageNo <= $pageCount; $pageNo++) {
+                $templateId = $pdf->importPage($pageNo);
+                $size = $pdf->getTemplateSize($templateId);
 
-            if ($pageNo == $targetPage) {
-                $qrSize = $surat->effective_qr_size_mm;
-                $qrX    = ($surat->effective_qr_pos_x / 100) * $size['width'];
-                $qrY    = ($surat->effective_qr_pos_y / 100) * $size['height'];
+                $orientation = ($size['width'] > $size['height']) ? 'L' : 'P';
+                $pdf->AddPage($orientation, [$size['width'], $size['height']]);
+                $pdf->useTemplate($templateId);
 
-                // Gambar QR
-                $pdf->Image($qrImage, $qrX, $qrY, $qrSize, $qrSize);
+                if ($pageNo == $targetPage) {
+                    $qrSize = $surat->effective_qr_size_mm;
+                    $qrX    = ($surat->effective_qr_pos_x / 100) * $size['width'];
+                    $qrY    = ($surat->effective_qr_pos_y / 100) * $size['height'];
 
-                // Kotak putih di tengah QR
-                $boxSize = 4;
-                $xBox = $qrX + ($qrSize / 2) - ($boxSize / 2);
-                $yBox = $qrY + ($qrSize / 2) - ($boxSize / 2);
-                $pdf->SetFillColor(255, 255, 255);
-                $pdf->Rect($xBox, $yBox, $boxSize, $boxSize, 'F');
+                    // Gambar QR
+                    $pdf->Image($qrImage, $qrX, $qrY, $qrSize, $qrSize);
 
-                // Logo di tengah QR
-                $logoPath = public_path('images/logo.png');
-                $logoSize = 3;
-                if (file_exists($logoPath)) {
-                    $xLogo = $qrX + ($qrSize / 2) - ($logoSize / 2);
-                    $yLogo = $qrY + ($qrSize / 2) - ($logoSize / 2);
-                    $pdf->Image($logoPath, $xLogo, $yLogo, $logoSize, $logoSize);
+                    // Kotak putih di tengah QR
+                    $boxSize = 4;
+                    $xBox = $qrX + ($qrSize / 2) - ($boxSize / 2);
+                    $yBox = $qrY + ($qrSize / 2) - ($boxSize / 2);
+                    $pdf->SetFillColor(255, 255, 255);
+                    $pdf->Rect($xBox, $yBox, $boxSize, $boxSize, 'F');
+
+                    // Logo di tengah QR
+                    $logoPath = public_path('images/logo.png');
+                    $logoSize = 3;
+                    if (file_exists($logoPath)) {
+                        $xLogo = $qrX + ($qrSize / 2) - ($logoSize / 2);
+                        $yLogo = $qrY + ($qrSize / 2) - ($logoSize / 2);
+                        $pdf->Image($logoPath, $xLogo, $yLogo, $logoSize, $logoSize);
+                    }
                 }
             }
+
+            $pdf->Output($outputPdf, 'F');
+        } finally {
+            // Hapus file hasil normalisasi (kalau memang dibuat, beda dari file asli)
+            if ($normalizedPdf !== $originalPdf && file_exists($normalizedPdf)) {
+                @unlink($normalizedPdf);
+            }
+        }
+    }
+
+    /**
+     * Coba normalisasi PDF pakai qpdf sebelum diproses FPDI (versi gratis).
+     * FPDI gratis tidak bisa baca PDF dengan compressed object/xref streams
+     * (umum di PDF hasil export Word/LibreOffice/Chrome versi baru).
+     * qpdf membongkar kompresi struktur itu TANPA perlu Ghostscript & tanpa
+     * mengubah tampilan/isi PDF sama sekali.
+     *
+     * Kalau qpdf tidak tersedia di server, atau prosesnya gagal, fallback
+     * ke file asli (perilaku sama seperti sebelumnya).
+     */
+    private function normalizePdfForFpdi(string $originalPdf): string
+    {
+        if (!function_exists('exec')) {
+            return $originalPdf;
         }
 
-        $pdf->Output($outputPdf, 'F');
+        static $qpdfAvailable = null;
+        if ($qpdfAvailable === null) {
+            if (stripos(PHP_OS_FAMILY, 'Windows') !== false) {
+                @exec('where qpdf 2>NUL', $whichOutput, $whichCode);
+            } else {
+                @exec('command -v qpdf 2>/dev/null', $whichOutput, $whichCode);
+            }
+            $qpdfAvailable = ($whichCode === 0 && !empty($whichOutput));
+        }
+
+        if (!$qpdfAvailable) {
+            return $originalPdf;
+        }
+
+        $qrDir = storage_path('app/public/qr');
+        if (!File::isDirectory($qrDir)) {
+            File::makeDirectory($qrDir, 0755, true);
+        }
+
+        $normalizedPath = $qrDir . '/normalized_' . uniqid() . '.pdf';
+
+        $cmd = 'qpdf --stream-data=uncompress --object-streams=disable --decrypt '
+            . escapeshellarg($originalPdf) . ' ' . escapeshellarg($normalizedPath) . ' 2>&1';
+
+        @exec($cmd, $output, $exitCode);
+
+        // qpdf exit code 3 = warning tapi tetap berhasil menulis output; 0 = sukses total
+        if (in_array($exitCode, [0, 3], true) && file_exists($normalizedPath)) {
+            return $normalizedPath;
+        }
+
+        if (file_exists($normalizedPath)) {
+            @unlink($normalizedPath);
+        }
+
+        return $originalPdf;
     }
 
     public function cancel(Surat $surat)
