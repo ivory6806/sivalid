@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use setasign\Fpdi\Fpdi;
 use Carbon\Carbon;
@@ -483,21 +484,16 @@ class ValidasiController extends Controller
      */
     private function normalizePdfForFpdi(string $originalPdf): string
     {
-        if (!function_exists('exec')) {
+        // function_exists('exec') selalu true walau exec dinonaktifkan lewat
+        // php.ini disable_functions — jadi harus dicek dari sana juga.
+        $disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
+        if (!function_exists('exec') || in_array('exec', $disabled, true)) {
+            Log::warning('normalizePdfForFpdi: exec() tidak tersedia/dinonaktifkan di php.ini (disable_functions).');
             return $originalPdf;
         }
 
-        static $qpdfAvailable = null;
-        if ($qpdfAvailable === null) {
-            if (stripos(PHP_OS_FAMILY, 'Windows') !== false) {
-                @exec('where qpdf 2>NUL', $whichOutput, $whichCode);
-            } else {
-                @exec('command -v qpdf 2>/dev/null', $whichOutput, $whichCode);
-            }
-            $qpdfAvailable = ($whichCode === 0 && !empty($whichOutput));
-        }
-
-        if (!$qpdfAvailable) {
+        $qpdfBinary = $this->resolveQpdfBinary();
+        if (!$qpdfBinary) {
             return $originalPdf;
         }
 
@@ -508,10 +504,17 @@ class ValidasiController extends Controller
 
         $normalizedPath = $qrDir . '/normalized_' . uniqid() . '.pdf';
 
-        $cmd = 'qpdf --stream-data=uncompress --object-streams=disable --decrypt '
+        $cmd = escapeshellarg($qpdfBinary) . ' --stream-data=uncompress --object-streams=disable --decrypt '
             . escapeshellarg($originalPdf) . ' ' . escapeshellarg($normalizedPath) . ' 2>&1';
 
         @exec($cmd, $output, $exitCode);
+
+        Log::info('normalizePdfForFpdi: hasil eksekusi qpdf', [
+            'command' => $cmd,
+            'exit_code' => $exitCode,
+            'output' => $output,
+            'output_file_exists' => file_exists($normalizedPath),
+        ]);
 
         // qpdf exit code 3 = warning tapi tetap berhasil menulis output; 0 = sukses total
         if (in_array($exitCode, [0, 3], true) && file_exists($normalizedPath)) {
@@ -523,6 +526,53 @@ class ValidasiController extends Controller
         }
 
         return $originalPdf;
+    }
+
+    /**
+     * Cari path ke qpdf.exe / qpdf. Prioritas:
+     * 1. QPDF_PATH di .env (paling pasti, terutama untuk XAMPP/WAMP Windows
+     *    yang seringkali tidak melihat PATH sistem dari proses Apache).
+     * 2. Deteksi otomatis lewat PATH sistem (where/command -v).
+     */
+    private function resolveQpdfBinary(): ?string
+    {
+        static $resolved = null;
+        static $checked = false;
+
+        if ($checked) {
+            return $resolved;
+        }
+        $checked = true;
+
+        // 1. Path manual dari .env
+        $configuredPath = config('services.qpdf.path');
+        if ($configuredPath) {
+            if (file_exists($configuredPath)) {
+                Log::info('normalizePdfForFpdi: pakai QPDF_PATH dari .env', ['path' => $configuredPath]);
+                $resolved = $configuredPath;
+                return $resolved;
+            }
+
+            Log::warning('normalizePdfForFpdi: QPDF_PATH di .env diisi tapi file tidak ditemukan', ['path' => $configuredPath]);
+        }
+
+        // 2. Deteksi lewat PATH sistem
+        if (stripos(PHP_OS_FAMILY, 'Windows') !== false) {
+            @exec('where qpdf 2>NUL', $whichOutput, $whichCode);
+        } else {
+            @exec('command -v qpdf 2>/dev/null', $whichOutput, $whichCode);
+        }
+
+        $available = ($whichCode === 0 && !empty($whichOutput));
+        Log::info('normalizePdfForFpdi: cek qpdf via PATH sistem', [
+            'available' => $available,
+            'where_output' => $whichOutput,
+            'where_exit_code' => $whichCode,
+            'php_os_family' => PHP_OS_FAMILY,
+        ]);
+
+        $resolved = $available ? 'qpdf' : null;
+        return $resolved;
     }
 
     public function cancel(Surat $surat)

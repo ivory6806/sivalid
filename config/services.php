@@ -28,6 +28,13 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    // Lokasi manual qpdf.exe, dipakai kalau PATH sistem tidak terbaca oleh
+    // proses Apache/PHP (sering terjadi di XAMPP/WAMP Windows).
+    // Isi QPDF_PATH di .env, contoh: QPDF_PATH="C:\qpdf\bin\qpdf.exe"
+    'qpdf' => [
+        'path' => env('QPDF_PATH'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
