@@ -117,6 +117,7 @@ public function index(Request $request)
         $file     = $request->file('file_surat');
         $fileName = time() . '_' . str_replace(' ', '_', $file->getClientOriginalName());
         $file->storeAs('surat', $fileName, 'public');
+        $this->normalizePdfIfPossible(storage_path('app/public/surat/' . $fileName));
 
         $unitId = session('active_unit_id');
         $unit = \App\Models\Unit::find($unitId);
@@ -142,7 +143,7 @@ public function index(Request $request)
         $suratFresh = Surat::with(['user', 'validator'])->find($surat->id);
         $kepala = $this->findKepalaForUnit($unitId);
         if ($kepala) {
-            Mail::to($kepala->email)->send(new SuratDiajukan($suratFresh));
+            Mail::to($kepala->email)->send(new SuratDiajukan($suratFresh, $kepala));
         }
 
         return redirect()->route('surat.index')
@@ -233,6 +234,7 @@ public function index(Request $request)
             $file = $request->file('file_surat');
             $fileName = time() . '_' . str_replace(' ', '_', $file->getClientOriginalName());
             $file->storeAs('surat', $fileName, 'public');
+            $this->normalizePdfIfPossible(storage_path('app/public/surat/' . $fileName));
         } else {
             $fileName = $surat->file_surat;
         }
@@ -258,7 +260,7 @@ public function index(Request $request)
         $suratFresh = Surat::with(['user', 'validator'])->find($surat->id);
         $kepala = $this->findKepalaForUnit($surat->unit_id);
         if ($kepala) {
-            Mail::to($kepala->email)->send(new SuratDiajukan($suratFresh));
+            Mail::to($kepala->email)->send(new SuratDiajukan($suratFresh, $kepala));
         }
 
         return redirect()->route('surat.index')
@@ -283,6 +285,7 @@ public function index(Request $request)
         $file     = $request->file('file_surat');
         $fileName = time() . '_' . str_replace(' ', '_', $file->getClientOriginalName());
         $file->storeAs('surat', $fileName, 'public');
+        $this->normalizePdfIfPossible(storage_path('app/public/surat/' . $fileName));
 
         $totalHalaman = null;
         try {
@@ -306,7 +309,7 @@ public function index(Request $request)
         $suratFresh = Surat::with(['user', 'validator'])->find($surat->id);
         $kepala = $this->findKepalaForUnit($unit->id);
         if ($kepala) {
-            Mail::to($kepala->email)->send(new SuratDiajukan($suratFresh));
+            Mail::to($kepala->email)->send(new SuratDiajukan($suratFresh, $kepala));
         }
 
         return redirect()->route('surat.index')
@@ -345,6 +348,7 @@ public function index(Request $request)
             $file = $request->file('file_surat');
             $fileName = time() . '_' . str_replace(' ', '_', $file->getClientOriginalName());
             $file->storeAs('surat', $fileName, 'public');
+            $this->normalizePdfIfPossible(storage_path('app/public/surat/' . $fileName));
 
             $totalHalaman = null;
             try {
@@ -373,7 +377,7 @@ public function index(Request $request)
         $suratFresh = Surat::with(['user', 'validator'])->find($surat->id);
         $kepala = $this->findKepalaForUnit($surat->unit_id);
         if ($kepala) {
-            Mail::to($kepala->email)->send(new SuratDiajukan($suratFresh));
+            Mail::to($kepala->email)->send(new SuratDiajukan($suratFresh, $kepala));
         }
 
         return redirect()->route('surat.index')
@@ -446,5 +450,73 @@ public function index(Request $request)
             'Content-Type'        => 'application/pdf',
             'Content-Disposition' => 'inline; filename="' . basename($filePath) . '"',
         ]);
+    }
+
+    /**
+     * FPDI (versi gratis yang dipakai project ini) tidak mendukung sebagian PDF
+     * dengan teknik kompresi tertentu — biasanya hasil scan HP, aplikasi scanner,
+     * atau export dari beberapa aplikasi office/versi PDF baru. Ini menyebabkan
+     * error "This PDF document probably uses a compression technique..." saat
+     * Kepala approve (proses stamping QR).
+     *
+     * Untuk mengatasi tanpa mengubah PDF asli secara terlihat, kita coba
+     * "tulis ulang" PDF pakai Ghostscript (kalau tersedia di server) langsung
+     * setelah file diupload. Ghostscript akan menormalkan struktur/kompresi PDF
+     * jadi format yang didukung FPDI, tanpa mengubah isi/tampilan halaman.
+     *
+     * Kalau Ghostscript tidak tersedia di server, fungsi ini diam saja (tidak
+     * mengubah apa-apa) — file asli tetap dipakai seperti biasa.
+     */
+    private function normalizePdfIfPossible(string $absolutePath): void
+    {
+        if (!file_exists($absolutePath)) {
+            return;
+        }
+
+        // shell_exec bisa saja di-disable di beberapa hosting shared — jangan sampai error
+        if (!function_exists('shell_exec')) {
+            return;
+        }
+
+        $disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
+        if (in_array('shell_exec', $disabled, true) || in_array('exec', $disabled, true)) {
+            return;
+        }
+
+        // Cari binary ghostscript (nama berbeda di Linux/Windows)
+        $gsBinary = null;
+        foreach (['gs', 'gswin64c', 'gswin32c'] as $candidate) {
+            $which = @shell_exec((stripos(PHP_OS, 'WIN') === 0 ? 'where ' : 'which ') . escapeshellarg($candidate) . ' 2>&1');
+            if ($which && trim($which) !== '' && !str_contains(strtolower($which), 'not found')) {
+                $gsBinary = $candidate;
+                break;
+            }
+        }
+
+        if (!$gsBinary) {
+            return; // Ghostscript tidak ada di server, lewati saja
+        }
+
+        $tempOutput = $absolutePath . '.normalized.pdf';
+
+        $cmd = sprintf(
+            '%s -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/prepress -dNOPAUSE -dQUIET -dBATCH -sOutputFile=%s %s 2>&1',
+            escapeshellcmd($gsBinary),
+            escapeshellarg($tempOutput),
+            escapeshellarg($absolutePath)
+        );
+
+        try {
+            @shell_exec($cmd);
+
+            if (file_exists($tempOutput) && filesize($tempOutput) > 0) {
+                @rename($tempOutput, $absolutePath);
+            } else {
+                @unlink($tempOutput);
+            }
+        } catch (\Throwable $e) {
+            @unlink($tempOutput);
+            \Illuminate\Support\Facades\Log::warning('Normalisasi PDF via Ghostscript gagal: ' . $e->getMessage());
+        }
     }
 }

@@ -95,8 +95,8 @@
                                 selected: '{{ old('role', isset($user) ? $user->role : '') }}',
                                 open: false,
                                 options: [
-                                    { value: 'staff',  label: 'Staff Administrasi',     icon: 'bi-person' },
-                                    { value: 'kepala', label: 'Kepala BAA & Beasiswa',  icon: 'bi-person-badge' }
+                                    { value: 'staff',  label: 'Staff',     icon: 'bi-person' },
+                                    { value: 'kepala', label: 'Kepala Unit/Bagian/Prodi',  icon: 'bi-person-badge' }
                                 ],
                                 get label() {
                                     var o = this.options.find(i => i.value === this.selected);

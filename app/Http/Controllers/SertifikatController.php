@@ -54,7 +54,8 @@ class SertifikatController extends Controller
     {
         $validated = $request->validate([
             'jenis_sertifikat'   => 'required|string|max:255',
-            'nomor_sertifikat'   => 'required|string|max:100|unique:sertifikats,nomor_sertifikat',
+            // Tambahkan whereNull('deleted_at') agar data yang dihapus tidak dihitung
+            'nomor_sertifikat'   => 'nullable|string|max:100|unique:sertifikats,nomor_sertifikat,NULL,id,deleted_at,NULL',
             'file_sertifikat'    => 'required|file|mimes:png,jpg,jpeg|max:10240',
         ], [
             'file_sertifikat.max'   => 'Ukuran file maksimal 10 MB.',
@@ -129,11 +130,12 @@ class SertifikatController extends Controller
             abort(403, 'Sertifikat hanya bisa diedit saat status direvisi.');
         }
 
-        $validated = $request->validate([
-            'jenis_sertifikat' => 'required|string|max:255',
-            'nomor_sertifikat' => 'required|string|max:100|unique:sertifikats,nomor_sertifikat,' . $sertifikat->id,
-            'file_sertifikat'  => 'nullable|file|mimes:png,jpg,jpeg|max:10240',
-        ]);
+    $validated = $request->validate([
+        'jenis_sertifikat' => 'required|string|max:255',
+        // Abaikan ID saat ini dan abaikan data yang di soft-delete
+        'nomor_sertifikat' => 'nullable|string|max:100|unique:sertifikats,nomor_sertifikat,' . $sertifikat->id . ',id,deleted_at,NULL',
+        'file_sertifikat'  => 'nullable|file|mimes:png,jpg,jpeg|max:10240',
+    ]);
 
         $fileName = $sertifikat->file_asli;
 

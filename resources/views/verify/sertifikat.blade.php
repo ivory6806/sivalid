@@ -76,8 +76,17 @@
         .info-row .label { color: #64748b; font-size: .8rem; display: flex; align-items: center; gap: 6px; }
         .info-row .value { font-weight: 600; color: #0f172a; text-align: right; font-size: .83rem; }
 
-        .verify-footer { text-align: center; padding: 16px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
-        .verify-footer p { font-size: .7rem; color: #94a3b8; line-height: 1.6; }
+        .verify-footer {
+            text-align: center;
+            padding: 16px 32px;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+        }
+        .verify-footer p {
+            font-size: .7rem;
+            color: #94a3b8;
+            line-height: 1.6;
+        }
 
         @media (max-width: 520px) {
             body { padding: 16px; }
@@ -99,7 +108,7 @@
                 e-mail: surat@polteklpp.ac.id
             </p>
             <div class="header-divider"></div>
-            <p class="header-sub">Verifikasi Sertifikat</p>
+            <p class="header-sub">Sistem Informasi Validasi</p>
         </div>
 
         @if($valid && $sertifikat)
@@ -128,7 +137,8 @@
             </div>
 
             <div class="verify-footer">
-                <p>Dokumen ini telah diverifikasi keasliannya oleh sistem SIAKTIF Politeknik LPP Yogyakarta.<br>QR Code ini hanya berlaku untuk dokumen dengan nomor sertifikat yang tertera di atas.</p>
+                <!-- <p>Dokumen ini telah diverifikasi keasliannya oleh sistem SIAKTIF Politeknik LPP Yogyakarta.<br>QR Code ini hanya berlaku untuk dokumen dengan nomor sertifikat yang tertera di atas.</p> -->
+                 <p>Bagian Administrasi Akademik dan Beasiswa &copy; {{ date('Y') }} Politeknik LPP Yogyakarta</p>
             </div>
         @else
             <div class="invalid-body">
@@ -143,7 +153,7 @@
                 <div class="invalid-chip"><i class="bi bi-exclamation-triangle-fill"></i> Tidak Terverifikasi</div>
             </div>
             <div class="verify-footer">
-                <p>Sistem Informasi Validasi Sertifikat — Politeknik LPP Yogyakarta</p>
+                <p>Bagian Administrasi Akademik dan Beasiswa &copy; {{ date('Y') }} Politeknik LPP Yogyakarta</p>
             </div>
         @endif
     </div>

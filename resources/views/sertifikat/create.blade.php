@@ -69,10 +69,12 @@
                             @error('jenis_sertifikat')<div style="font-size:.76rem;color:#ef4444;margin-top:6px"><i class="bi bi-exclamation-circle"></i> {{ $message }}</div>@enderror
                         </div>
                         <div class="col-md-6">
-                            <label style="font-size:.8rem;font-weight:600;color:var(--text-dark);margin-bottom:8px;display:block">Nomor Sertifikat <span style="color:#ef4444">*</span></label>
+                            <!-- Hapus tanda bintang (*) dari label -->
+                            <label style="font-size:.8rem;font-weight:600;color:var(--text-dark);margin-bottom:8px;display:block">Nomor Sertifikat</label>
                             <div style="position:relative">
                                 <i class="bi bi-hash" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:.85rem"></i>
-                                <input type="text" name="nomor_sertifikat" class="form-control" value="{{ old('nomor_sertifikat') }}" required placeholder="Contoh: 123/SERT/LPP/2026"
+                                <!-- Hapus atribut required dari input -->
+                                <input type="text" name="nomor_sertifikat" class="form-control" value="{{ old('nomor_sertifikat') }}" placeholder="Contoh: 123/SERT/LPP/2026"
                                     style="border-radius:10px;padding:12px 16px 12px 42px;border:1.5px solid var(--border);font-size:.88rem;color:var(--text-dark)"
                                     onfocus="this.style.borderColor='#7c3aed';this.style.boxShadow='0 0 0 3px rgba(124,58,237,.1)'"
                                     onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
