@@ -14,7 +14,7 @@ class RoleMiddleware
             abort(401, 'Silakan login terlebih dahulu.');
         }
 
-        if (! in_array($request->user()->role, $roles)) {
+        if (! in_array($request->user()->role, $roles) && !$request->user()->isSuperadmin()) {
             abort(403, 'Anda tidak memiliki akses ke halaman ini.');
         }
 

@@ -9,6 +9,15 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            Schema::table('surats', function (Blueprint $table) {
+                $table->dropUnique('surats_nomor_surat_unique');
+                $table->unique(['unit_id', 'nomor_surat'], 'surats_unit_nomor_unique');
+            });
+
+            return;
+        }
+
         Schema::table('surats', function (Blueprint $table) {
             // 1. Hapus index lama jika ada
             $indexExists = collect(DB::select(
@@ -27,6 +36,15 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            Schema::table('surats', function (Blueprint $table) {
+                $table->dropUnique('surats_unit_nomor_unique');
+                $table->unique('nomor_surat', 'surats_nomor_surat_unique');
+            });
+
+            return;
+        }
+
         // 1. Hapus index composite
         DB::statement("ALTER TABLE surats DROP INDEX surats_unit_nomor_unique");
 

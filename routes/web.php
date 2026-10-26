@@ -157,7 +157,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/validasi-sertifikat/{sertifikat}/generate', [ValidasiSertifikatController::class, 'generate'])
             ->name('validasi-sertifikat.generate')
             ->where('sertifikat', '[0-9]+');
-        Route::post('/validasi-sertifikat/{sertifikat}/revise', [ValidasiSertikratController::class, 'revise'])
+        Route::post('/validasi-sertifikat/{sertifikat}/revise', [ValidasiSertifikatController::class, 'revise'])
             ->name('validasi-sertifikat.revise')
             ->where('sertifikat', '[0-9]+');
         Route::post('/validasi-sertifikat/{sertifikat}/cancel', [ValidasiSertifikatController::class, 'cancel'])

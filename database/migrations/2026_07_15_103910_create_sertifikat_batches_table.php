@@ -37,23 +37,12 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::create('sertifikats', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('batch_id')->constrained('sertifikat_batches')->cascadeOnDelete();
-            $table->string('nama');
-            $table->string('nip')->nullable();
-            $table->string('jabatan')->nullable();
-            $table->string('nomor')->unique();
-            $table->json('data_extra')->nullable();
-            $table->softDeletes();
-            $table->timestamps();
-            $table->index(['batch_id', 'nama']);
-        });
+        // sertifikats table moved to 2026_08_12_111721_create_sertifikat_tables.php
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('sertifikats');
+        // Schema::dropIfExists('sertifikats');
         Schema::dropIfExists('sertifikat_batches');
         Schema::dropIfExists('sertifikat_templates');
     }
