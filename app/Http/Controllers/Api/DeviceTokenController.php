@@ -16,8 +16,9 @@ class DeviceTokenController extends Controller
         ]);
 
         $deviceToken = DeviceToken::updateOrCreate(
-            ['token' => $validated['token']],
+            ['token_hash' => hash('sha256', $validated['token'])],
             [
+                'token' => $validated['token'],
                 'user_id' => $request->user()->id,
                 'platform' => $validated['platform'] ?? 'android',
             ],
