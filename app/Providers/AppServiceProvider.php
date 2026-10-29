@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\Sertifikat;
+use App\Models\Surat;
+use App\Observers\SertifikatObserver;
+use App\Observers\SuratObserver;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Schema; // <-- TAMBAHKAN INI
 
@@ -22,6 +26,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // TAMBAHKAN BARIS INI:
         Schema::defaultStringLength(191);
+
+        Surat::observe(SuratObserver::class);
+        Sertifikat::observe(SertifikatObserver::class);
 
         if (config('app.env') === 'production') {
             \Illuminate\Support\Facades\URL::forceScheme('http');

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\SertifikatController;
 use App\Http\Controllers\Api\SuratController;
@@ -47,6 +48,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
     Route::put('/profile/password', [AuthController::class, 'changePassword']);
+
+    // Token perangkat untuk notifikasi push (FCM)
+    Route::post('/device-token', [DeviceTokenController::class, 'store']);
+    Route::delete('/device-token', [DeviceTokenController::class, 'destroy']);
 
     // Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index']);
